@@ -22,12 +22,12 @@ namespace AEPM_GetMaster
 
             var dt = new DataTable();
             var dset = new DataSet();
-            guid = args[0];
+            Guid = args[0];
 
             //retrieve any records needing updating
             try
             {
-                using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionString"]))
+                using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionStringDev"]))
                 {
                     string sql = GetUnprocessMasterRecsString();
                     var objDataAdapter = new iDB2DataAdapter();
@@ -70,13 +70,13 @@ namespace AEPM_GetMaster
             }
         }
 
-        public static string guid { get; set; }
+        public static string Guid { get; set; }
 
         public static void TestAsync(DataTable dt, int i)
         {
            
-            string guid = GetGuidString(dt, i);
-            string part = GetPartString(dt, i);
+            string guidString = GetGuidString(dt, i);
+            string partString = GetPartString(dt, i);
 
             //Under Settings, use the following links to either point to production or test
             //production = http://enmiis01.global.nmhg.corp/AEPM_services/Services.svc'
@@ -84,7 +84,7 @@ namespace AEPM_GetMaster
 
             IServices client = new ServicesClient();
 
-            GetMasterResult getResult = client.GetMaster(part);
+            GetMasterResult getResult = client.GetMaster(partString);
 
             Type objectType = getResult.GetType();
             var xmlSerializer = new XmlSerializer(objectType);
@@ -102,21 +102,21 @@ namespace AEPM_GetMaster
 
             if (getResult.Error == null)
             {
-                UpdateFoundPart(guid, getResult);
+                UpdateFoundPart(guidString, getResult);
 
-                InsertCrossParts(guid, getResult);
+                InsertCrossParts(guidString, getResult);
             }
             else
             {
-                UpdateFoundNotPart(guid);
+                UpdateFoundNotPart(guidString);
             }
                
         }
         
 
-        private static void UpdateFoundNotPart(string guid)
+        private static void UpdateFoundNotPart(string passedGuid)
         {
-            using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionString"]))
+            using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionStringDev"]))
             {
                 string query = GetPartNotFoundUpdateMasterString();
 
@@ -128,20 +128,20 @@ namespace AEPM_GetMaster
 
                 objDataAdapter.UpdateCommand = cmd;
                 objDataAdapter.UpdateCommand.CommandTimeout = 0;
-                cmd.Parameters.Add("@guid", iDB2DbType.iDB2Char);
-                cmd.Parameters["@guid"].Value = guid;
+                cmd.Parameters.Add("@passedGuid", iDB2DbType.iDB2Char);
+                cmd.Parameters["@passedGuid"].Value = passedGuid;
 
                 cmd.Parameters.Add("@retrn", iDB2DbType.iDB2Char);
-                cmd.Parameters["@retrn"].Value = 'R';
+                cmd.Parameters["@retrn"].Value = 'N';
 
                 cmd.ExecuteNonQuery();
                 cmd.Connection.Close();
             }
         }
 
-        private static void UpdateFoundPart(string guid, GetMasterResult getResult)
+        private static void UpdateFoundPart(string passedGuid, GetMasterResult getResult)
         {
-            using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionString"]))
+            using (var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionStringDev"]))
             {
                 string query = GetPartFoundUpdateMasterString();
 
@@ -153,8 +153,8 @@ namespace AEPM_GetMaster
 
                 objDataAdapter.UpdateCommand = cmd;
                 objDataAdapter.UpdateCommand.CommandTimeout = 0;
-                cmd.Parameters.Add("@guid", iDB2DbType.iDB2Char);
-                cmd.Parameters["@guid"].Value = guid;
+                cmd.Parameters.Add("@passedGuid", iDB2DbType.iDB2Char);
+                cmd.Parameters["@passedGuid"].Value = passedGuid;
 
                 cmd.Parameters.Add("@usrid", iDB2DbType.iDB2Char);
                 cmd.Parameters["@usrid"].Value = (getResult.UserID.Trim().Length > 0) ? getResult.UserID : " ";
@@ -208,12 +208,12 @@ namespace AEPM_GetMaster
             }
         }
 
-        private static void InsertCrossParts(string guid, GetMasterResult getResult)
+        private static void InsertCrossParts(string passedGuid, GetMasterResult getResult)
         {
             foreach (CrossPart s in getResult.CrossPartList)
             {
                 using (
-                    var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionString"]))
+                    var conn = new iDB2Connection(ConfigurationManager.AppSettings["AS400ConnectionStringDev"]))
                 {
                     string query = GetCrossPartInsertString();
 
@@ -225,8 +225,8 @@ namespace AEPM_GetMaster
 
                     objDataAdapter.InsertCommand = cmd;
                     objDataAdapter.InsertCommand.CommandTimeout = 0;
-                    cmd.Parameters.Add("@guid", iDB2DbType.iDB2Char);
-                    cmd.Parameters["@guid"].Value = guid;
+                    cmd.Parameters.Add("@passedGuid", iDB2DbType.iDB2Char);
+                    cmd.Parameters["@passedGuid"].Value = passedGuid;
 
                     cmd.Parameters.Add("@item", iDB2DbType.iDB2Char);
                     cmd.Parameters["@item"].Value = s.PartNumber;
@@ -276,8 +276,8 @@ namespace AEPM_GetMaster
             var sb = new StringBuilder();
             sb.Append(@"SELECT G_GUID, G_ITEM, G_RETRN FROM ");
             sb.Append(Settings.Default.partFileL1);
-            sb.Append(" WHERE G_GUID != 'R'");
-         //   sb.Append(guid);
+            sb.Append(" WHERE G_GUID = ");
+            sb.Append('\'' + Guid + '\'');
             return sb.ToString();
         }
 
@@ -286,7 +286,7 @@ namespace AEPM_GetMaster
             var sb = new StringBuilder();
             sb.Append("INSERT into ");
             sb.Append(Settings.Default.partXRefFile);
-            sb.Append(" (X_GUID,X_ITEM,X_BRAND) VALUES(@guid, @item, @brand)");
+            sb.Append(" (X_GUID,X_ITEM,X_BRAND) VALUES(@passedGuid, @item, @brand)");
             return sb.ToString();
         }
 
@@ -296,7 +296,7 @@ namespace AEPM_GetMaster
             sb.Append("UPDATE ");
             sb.Append(Settings.Default.partFile);
             sb.Append(
-                " SET G_USRID = @usrid,G_BRANDED = @branded,G_COMCODE = @comcode,G_LEVEL = @level, G_STATUS = @status, G_RTNBLE = @rtnble, G_TARIFFCD = @tariffcd, G_AMSC = @amsc, G_TQTY = @tqty, G_SVCLIFE = @svclife, G_PKGCODE = @pkgcode, G_INFO = @info, G_RETRN = @retrn WHERE G_GUID = @guid");
+                " SET G_USRID = @usrid,G_BRANDED = @branded,G_COMCODE = @comcode,G_LEVEL = @level, G_STATUS = @status, G_RTNBLE = @rtnble, G_TARIFFCD = @tariffcd, G_AMSC = @amsc, G_TQTY = @tqty, G_SVCLIFE = @svclife, G_PKGCODE = @pkgcode, G_INFO = @info, G_RETRN = @retrn WHERE G_GUID = @passedGuid");
             return sb.ToString();
         }
 
@@ -306,7 +306,7 @@ namespace AEPM_GetMaster
             sb.Append("UPDATE ");
             sb.Append(Settings.Default.partFile);
             sb.Append(
-                " SET G_RETRN = @retrn WHERE G_GUID = @guid");
+                " SET G_RETRN = @retrn WHERE G_GUID = @passedGuid");
             return sb.ToString();
         }
 
