@@ -276,8 +276,8 @@ namespace AEPM_GetMaster
             var sb = new StringBuilder();
             sb.Append(@"SELECT G_GUID, G_ITEM, G_RETRN FROM ");
             sb.Append(Settings.Default.partFileL1);
-            sb.Append(" WHERE G_GUID = ");
-            sb.Append(guid);
+            sb.Append(" WHERE G_GUID != 'R'");
+         //   sb.Append(guid);
             return sb.ToString();
         }
 
